@@ -1,6 +1,6 @@
 [project]
 name = "caramelo"
-version = "0.1.0"
+version = "0.2.0"
 description = "Farejador de promoções de hardware que publica descontos reais em canais."
 readme = "README.md"
 authors = [
@@ -91,7 +91,7 @@ modules = [
     "caramelo.adapters.affiliate",
     "caramelo.adapters.clock",
     "caramelo.adapters.copywriting",
-    "caramelo.adapters.http",
+    "caramelo.adapters.sources",
     "caramelo.adapters.persistence",
     "caramelo.adapters.queue",
 ]

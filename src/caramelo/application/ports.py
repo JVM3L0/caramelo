@@ -1,18 +1,18 @@
 """Interfaces the use cases depend on. Adapters implement them; nothing here knows
 which store, database, queue or messaging platform sits behind them."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
 from types import TracebackType
 from typing import Protocol, Self
 
-from caramelo.domain.catalog import Listing
+from caramelo.domain.catalog import CollectionSchedule, Listing
 from caramelo.domain.channels import Channel, ChannelKind
-from caramelo.domain.ids import SourceId, TenantId
+from caramelo.domain.ids import ListingId, SourceId, TenantId
 from caramelo.domain.offers import Deal, RawOffer
 from caramelo.domain.pricing import PricePoint
 
-type JobPayload = str | int | float | bool | None
+type JobPayload = str | int | float | bool | list[str] | None
 
 
 class Clock(Protocol):
@@ -28,7 +28,13 @@ class DealSource(Protocol):
     @property
     def id(self) -> SourceId: ...
 
-    def fetch(self) -> AsyncIterator[RawOffer]: ...
+    def external_id_from_url(self, url: str) -> str | None:
+        """The store's product id if the URL belongs to this store, else None."""
+        ...
+
+    def fetch(self, external_ids: Sequence[str]) -> AsyncIterator[RawOffer]:
+        """Current offers for the given products; missing products are skipped."""
+        ...
 
 
 # --- Driven ports: persistence ----------------------------------------------
@@ -36,6 +42,15 @@ class DealSource(Protocol):
 
 class CatalogRepository(Protocol):
     async def upsert_listing(self, offer: RawOffer, seen_at: datetime) -> Listing: ...
+
+    async def set_schedule(
+        self, listing_id: ListingId, schedule: CollectionSchedule | None
+    ) -> None: ...
+
+    async def claim_due(self, now: datetime, limit: int) -> list[Listing]:
+        """Monitored listings due by `now`, already moved to their next slot so
+        concurrent schedulers never claim the same listing twice."""
+        ...
 
 
 class PriceHistory(Protocol):
@@ -69,7 +84,9 @@ class UnitOfWork(Protocol):
 class TaskQueue(Protocol):
     """Schedules background jobs by name. The queue technology stays in its adapter."""
 
-    async def enqueue(self, job: str, **payload: JobPayload) -> None: ...
+    async def enqueue(self, job: str, *, lock: str | None = None, **payload: JobPayload) -> None:
+        """Jobs sharing a `lock` run one at a time, in enqueue order."""
+        ...
 
 
 # --- Driven ports: publishing -----------------------------------------------

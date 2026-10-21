@@ -45,6 +45,28 @@ Os testes de integração usam testcontainers. Com Podman, exporte antes:
 `DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock` e `TESTCONTAINERS_RYUK_DISABLED=true`
 (com `systemctl --user enable --now podman.socket`).
 
+## Uso
+
+```bash
+# monitorar um produto (a loja é reconhecida pela URL; requer a integração da loja, fase 1)
+podman compose run --rm worker watch https://... --every 30m
+```
+
+O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.
+Variáveis úteis: `CARAMELO_DEFAULT_COLLECT_INTERVAL` (padrão `1h`) e
+`CARAMELO_REQUEST_MIN_INTERVAL` (pausa entre requisições à mesma loja, em segundos).
+
+## Contribuindo
+
+Fluxo: `develop → main`. Cada fase do roadmap tem uma branch `phase/<X.Y.Z>-<slug>` criada a partir de
+`develop`; o trabalho é feito em sub-branches `<tipo>/<X.Y.Z>-<slug>` (`feat`, `fix`, `chore`, `docs`,
+`refactor`, `test`) que entram na branch da fase por PR. Ao fim da fase, a branch da fase entra em
+`develop` e é criada a tag `vX.Y.Z`; `main` recebe `develop` quando a fase está estável.
+
+- A versão pertence à fase: sobe uma vez no `pyproject.toml`; as sub-branches só adicionam linhas ao
+  `CHANGELOG.md`.
+- Antes do PR: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run lint-imports && uv run pytest`.
+
 ## Arquitetura
 
 Hexagonal (ports & adapters) num monólito modular:

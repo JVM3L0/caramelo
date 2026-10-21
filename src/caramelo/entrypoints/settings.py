@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,11 @@ class Settings(BaseSettings):
     )
     # Off for the MVP; set e.g. http://user:pass@host:port to route store traffic.
     http_proxy: str | None = None
+
+    # Collection pacing. Per-listing intervals can override the default.
+    default_collect_interval: timedelta = timedelta(hours=1)
+    # Minimum pause between two requests to the same store.
+    request_min_interval: float = 2.0
 
     # Pluggable choices: add a value here plus a branch in the container.
     affiliate_linker: Literal["passthrough"] = "passthrough"

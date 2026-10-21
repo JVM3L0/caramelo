@@ -1,17 +1,27 @@
 from dataclasses import dataclass, field
 
 import httpx
+import procrastinate
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from caramelo.adapters.affiliate.passthrough import PassthroughAffiliateLinker
 from caramelo.adapters.clock import SystemClock
 from caramelo.adapters.copywriting.template import TemplateCopyWriter
-from caramelo.adapters.http.client import build_http_client
 from caramelo.adapters.persistence.repositories import SqlUnitOfWork
+from caramelo.adapters.queue import procrastinate as queue
+from caramelo.adapters.sources.http import build_http_client
 from caramelo.application import jobs
 from caramelo.application.jobs import JobHandler
-from caramelo.application.ports import AffiliateLinker, Clock, CopyWriter, DealSource
-from caramelo.application.use_cases.collect_source import CollectSource
+from caramelo.application.ports import (
+    AffiliateLinker,
+    Clock,
+    CopyWriter,
+    DealSource,
+    TaskQueue,
+)
+from caramelo.application.use_cases.collect_listings import CollectListings
+from caramelo.application.use_cases.monitor_listing import MonitorListing
+from caramelo.application.use_cases.schedule_collections import ScheduleDueCollections
 from caramelo.domain.ids import SourceId
 from caramelo.entrypoints.settings import Settings
 
@@ -24,19 +34,31 @@ class Container:
     clock: Clock
     affiliate: AffiliateLinker
     copywriter: CopyWriter
+    queue_app: procrastinate.App
+    task_queue: TaskQueue
     # Store integrations register here as they are built (Kabum, Mercado Livre...).
     sources: dict[SourceId, DealSource] = field(default_factory=dict)
 
     def uow(self) -> SqlUnitOfWork:
         return SqlUnitOfWork(self.engine)
 
+    def monitor_listing(self) -> MonitorListing:
+        return MonitorListing(self.sources, self.uow, self.clock)
+
     def job_handlers(self) -> dict[str, JobHandler]:
-        collect = CollectSource(self.uow, self.clock)
+        collect = CollectListings(self.uow, self.clock)
+        schedule = ScheduleDueCollections(self.uow, self.task_queue, self.clock)
 
-        async def collect_source(source_id: str) -> None:
-            await collect(self.sources[SourceId(source_id)])
+        async def collect_listings(source_id: str, external_ids: list[str]) -> None:
+            await collect(self.sources[SourceId(source_id)], external_ids)
 
-        return {jobs.COLLECT_SOURCE: collect_source}
+        return {
+            jobs.COLLECT_LISTINGS: collect_listings,
+            jobs.SCHEDULE_DUE_COLLECTIONS: schedule,
+        }
+
+    def register_jobs(self) -> None:
+        queue.register(self.queue_app, self.job_handlers(), periodic=jobs.PERIODIC)
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -51,6 +73,7 @@ def build_container(settings: Settings) -> Container:
         case "template":
             copywriter = TemplateCopyWriter()
 
+    queue_app = queue.create_app(settings.database_url)
     return Container(
         settings=settings,
         engine=create_async_engine(settings.sqlalchemy_url, pool_pre_ping=True),
@@ -58,4 +81,6 @@ def build_container(settings: Settings) -> Container:
         clock=SystemClock(),
         affiliate=affiliate,
         copywriter=copywriter,
+        queue_app=queue_app,
+        task_queue=queue.ProcrastinateTaskQueue(queue_app),
     )

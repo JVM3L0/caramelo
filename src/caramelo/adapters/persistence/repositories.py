@@ -1,12 +1,13 @@
 from datetime import datetime
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
+from sqlalchemy import DateTime, Row, literal, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from caramelo.adapters.persistence.tables import listings, price_points
-from caramelo.domain.catalog import Listing
+from caramelo.domain.catalog import CollectionSchedule, Listing
 from caramelo.domain.ids import ListingId, ProductId, SourceId, new_id
 from caramelo.domain.offers import RawOffer
 from caramelo.domain.pricing import PricePoint
@@ -34,16 +35,52 @@ class SqlCatalogRepository:
                 "last_seen_at": stmt.excluded.last_seen_at,
             },
         ).returning(listings)
-        row = (await self._conn.execute(stmt)).one()
-        return Listing(
-            id=ListingId(row.id),
-            source_id=SourceId(row.source_id),
-            external_id=row.external_id,
-            url=row.url,
-            title=row.title,
-            product_id=ProductId(row.product_id) if row.product_id else None,
-            monitored=row.monitored,
+        return _to_listing((await self._conn.execute(stmt)).one())
+
+    async def set_schedule(
+        self, listing_id: ListingId, schedule: CollectionSchedule | None
+    ) -> None:
+        await self._conn.execute(
+            update(listings)
+            .where(listings.c.id == listing_id)
+            .values(
+                collect_interval=schedule.interval if schedule else None,
+                next_collect_at=schedule.next_collect_at if schedule else None,
+            )
         )
+
+    async def claim_due(self, now: datetime, limit: int) -> list[Listing]:
+        due = (
+            select(listings.c.id)
+            .where(listings.c.next_collect_at <= now)
+            .order_by(listings.c.next_collect_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        # Next slot counts from now, so a worker that was down doesn't cause a burst.
+        stmt = (
+            update(listings)
+            .where(listings.c.id.in_(due))
+            .values(
+                next_collect_at=literal(now, DateTime(timezone=True)) + listings.c.collect_interval
+            )
+            .returning(listings)
+        )
+        return [_to_listing(row) for row in await self._conn.execute(stmt)]
+
+
+def _to_listing(row: Row[Any]) -> Listing:
+    return Listing(
+        id=ListingId(row.id),
+        source_id=SourceId(row.source_id),
+        external_id=row.external_id,
+        url=row.url,
+        title=row.title,
+        product_id=ProductId(row.product_id) if row.product_id else None,
+        schedule=CollectionSchedule(row.collect_interval, row.next_collect_at)
+        if row.collect_interval is not None
+        else None,
+    )
 
 
 class SqlPriceHistory:

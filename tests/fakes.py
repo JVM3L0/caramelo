@@ -1,11 +1,13 @@
 """In-memory implementations of the ports, for use-case tests."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Self
 
-from caramelo.domain.catalog import Listing
+from caramelo.application.ports import JobPayload
+from caramelo.domain.catalog import CollectionSchedule, Listing
 from caramelo.domain.ids import ListingId, SourceId, new_id
 from caramelo.domain.offers import RawOffer
 from caramelo.domain.pricing import PricePoint
@@ -23,17 +25,26 @@ class FakeClock:
 
 
 class FakeSource:
+    """Serves canned offers; URLs look like https://<source_id>.test/<external_id>."""
+
     def __init__(self, source_id: str, offers: list[RawOffer]) -> None:
         self._id = SourceId(source_id)
-        self._offers = offers
+        self._offers = {o.external_id: o for o in offers}
+        self.fetched: list[list[str]] = []
 
     @property
     def id(self) -> SourceId:
         return self._id
 
-    async def fetch(self) -> AsyncIterator[RawOffer]:
-        for offer in self._offers:
-            yield offer
+    def external_id_from_url(self, url: str) -> str | None:
+        prefix = f"https://{self._id}.test/"
+        return url.removeprefix(prefix) if url.startswith(prefix) else None
+
+    async def fetch(self, external_ids: Sequence[str]) -> AsyncIterator[RawOffer]:
+        self.fetched.append(list(external_ids))
+        for external_id in external_ids:
+            if external_id in self._offers:
+                yield self._offers[external_id]
 
 
 class FakeCatalog:
@@ -54,6 +65,23 @@ class FakeCatalog:
             self.listings[key] = listing
         listing.title, listing.url = offer.title, offer.url
         return listing
+
+    async def set_schedule(
+        self, listing_id: ListingId, schedule: CollectionSchedule | None
+    ) -> None:
+        for key, listing in self.listings.items():
+            if listing.id == listing_id:
+                self.listings[key] = replace(listing, schedule=schedule)
+
+    async def claim_due(self, now: datetime, limit: int) -> list[Listing]:
+        scheduled = [(x.schedule.next_collect_at, x) for x in self.listings.values() if x.schedule]
+        due = [x for at, x in sorted(scheduled, key=lambda pair: pair[0]) if at <= now][:limit]
+        for listing in due:
+            assert listing.schedule
+            self.listings[(listing.source_id, listing.external_id)] = replace(
+                listing, schedule=CollectionSchedule.starting(now, listing.schedule.interval)
+            )
+        return due
 
 
 class FakePriceHistory:
@@ -85,3 +113,11 @@ class FakeUnitOfWork:
 
     async def commit(self) -> None:
         self.commits += 1
+
+
+class FakeTaskQueue:
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, str | None, dict[str, JobPayload]]] = []
+
+    async def enqueue(self, job: str, *, lock: str | None = None, **payload: JobPayload) -> None:
+        self.jobs.append((job, lock, payload))

@@ -34,7 +34,7 @@ As fases 1 a 5 formam o MVP: o BuscaPC publicando ofertas reais de forma automá
 
 Objetivo: começar a acumular histórico o quanto antes, porque a fase 3 depende de semanas de dados.
 
-1. **Catálogo monitorado.** Comando `caramelo monitorar <url>` (CLI provisória até o bot da fase 5)
+1. **Catálogo monitorado.** Comando `caramelo watch <url> --every 30m` (CLI provisória até o bot da fase 5)
    que cadastra um anúncio para coleta. Semear algumas centenas de SKUs relevantes: GPUs, CPUs,
    SSDs, RAM, monitores e periféricos populares.
 2. **Adapter Mercado Livre** (API oficial).

@@ -1,22 +1,46 @@
 """Procrastinate-backed job queue (jobs stored in Postgres).
 
 This is the only module that imports procrastinate. Swapping the queue (e.g. for
-Redis + arq) means writing another module with the same three functions/classes.
+Redis + arq) means writing another module with the same functions and class.
 """
 
 from collections.abc import Mapping
+from typing import Any
 
 import procrastinate
 
 from caramelo.application.jobs import JobHandler
 from caramelo.application.ports import JobPayload
 
+# 3 attempts in total, waiting 5s, then 10s (exponential).
+RETRY = procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5)
 
-def build_app(conninfo: str, handlers: Mapping[str, JobHandler]) -> procrastinate.App:
-    app = procrastinate.App(connector=procrastinate.PsycopgConnector(conninfo=conninfo))
+
+def create_app(conninfo: str) -> procrastinate.App:
+    return procrastinate.App(connector=procrastinate.PsycopgConnector(conninfo=conninfo))
+
+
+def register(
+    app: procrastinate.App,
+    handlers: Mapping[str, JobHandler],
+    periodic: Mapping[str, str] | None = None,
+) -> None:
+    """Registers each handler as a task; `periodic` maps handler names to cron expressions."""
+    periodic = periodic or {}
     for name, handler in handlers.items():
-        app.task(name=name, retry=3)(handler)
-    return app
+        if name in periodic:
+            _register_periodic(app, name, handler, periodic[name])
+        else:
+            app.task(name=name, retry=RETRY)(handler)
+
+
+def _register_periodic(app: procrastinate.App, name: str, handler: JobHandler, cron: str) -> None:
+    # Procrastinate passes the scheduled timestamp; our handlers don't need it.
+    async def run(timestamp: int) -> None:
+        await handler()
+
+    # No retries: the next tick runs it again anyway. The lock keeps ticks from overlapping.
+    app.periodic(cron=cron, periodic_id=name)(app.task(name=name, lock=name)(run))
 
 
 async def ensure_schema(app: procrastinate.App) -> None:
@@ -36,5 +60,6 @@ class ProcrastinateTaskQueue:
     def __init__(self, app: procrastinate.App) -> None:
         self._app = app
 
-    async def enqueue(self, job: str, **payload: JobPayload) -> None:
-        await self._app.configure_task(job).defer_async(**payload)
+    async def enqueue(self, job: str, *, lock: str | None = None, **payload: JobPayload) -> None:
+        kwargs: dict[str, Any] = dict(payload)
+        await self._app.configure_task(job, lock=lock).defer_async(**kwargs)

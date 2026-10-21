@@ -5,7 +5,10 @@ ProductFamily  -> what people search for   (RTX 4070 SUPER 12GB)
     Listing    -> that variant at a store  (Kabum SKU 123456)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from caramelo.domain.ids import FamilyId, ListingId, ProductId, SourceId
 
@@ -36,4 +39,27 @@ class Listing:
     title: str
     # Filled by product matching; unmatched listings still collect history.
     product_id: ProductId | None = None
-    monitored: bool = True
+    schedule: CollectionSchedule | None = None
+
+    @property
+    def monitored(self) -> bool:
+        return self.schedule is not None
+
+
+MIN_COLLECT_INTERVAL = timedelta(minutes=1)
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionSchedule:
+    """How often a monitored listing is collected, and when it is due next."""
+
+    interval: timedelta
+    next_collect_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.interval < MIN_COLLECT_INTERVAL:
+            raise ValueError(f"collect interval must be at least {MIN_COLLECT_INTERVAL}")
+
+    @classmethod
+    def starting(cls, now: datetime, interval: timedelta) -> CollectionSchedule:
+        return cls(interval=interval, next_collect_at=now + interval)

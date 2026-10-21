@@ -3,10 +3,13 @@ tenants; anything a channel owner configures carries tenant_id."""
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
+    Interval,
     MetaData,
     SmallInteger,
     Table,
@@ -19,6 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 metadata = MetaData(
     naming_convention={
         "ix": "ix_%(column_0_label)s",
+        "ck": "ck_%(table_name)s_%(constraint_name)s",
         "uq": "uq_%(table_name)s_%(column_0_name)s",
         "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
         "pk": "pk_%(table_name)s",
@@ -73,10 +77,20 @@ listings = Table(
     Column("url", Text, nullable=False),
     Column("title", Text, nullable=False),
     Column("product_id", UUID(as_uuid=True), ForeignKey("products.id")),
-    Column("monitored", Boolean, nullable=False, server_default="true"),
     Column("first_seen_at", DateTime(timezone=True), nullable=False),
     Column("last_seen_at", DateTime(timezone=True), nullable=False),
+    # Collection schedule: both set for monitored listings, both null otherwise.
+    Column("collect_interval", Interval),
+    Column("next_collect_at", DateTime(timezone=True)),
     UniqueConstraint("source_id", "external_id"),
+    CheckConstraint(
+        "(collect_interval IS NULL) = (next_collect_at IS NULL)", name="schedule_complete"
+    ),
+    Index(
+        "ix_listings_next_collect_at",
+        "next_collect_at",
+        postgresql_where="next_collect_at IS NOT NULL",
+    ),
 )
 
 # TimescaleDB hypertable partitioned by collected_at (see the initial migration).

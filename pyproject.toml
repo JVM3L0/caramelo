@@ -1,0 +1,97 @@
+[project]
+name = "caramelo"
+version = "0.1.0"
+description = "Farejador de promoções de hardware que publica descontos reais em canais."
+readme = "README.md"
+authors = [
+    { name = "João Victor Melo", email = "joaovictor.slv@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "httpx>=0.28.1",
+    "procrastinate>=3",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2",
+    "pydantic-settings>=2.16.1",
+    "selectolax>=1.0.1",
+    "sqlalchemy[asyncio]>=2",
+]
+
+[project.scripts]
+caramelo = "caramelo.entrypoints.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.2,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "import-linter>=2.15",
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+    "testcontainers[postgres]>=4.15.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: needs a container runtime (Docker or Podman)"]
+
+# Architecture rules, checked with `uv run lint-imports`.
+[tool.importlinter]
+root_package = "caramelo"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Hexagonal layers"
+type = "layers"
+layers = [
+    "caramelo.entrypoints",
+    "caramelo.adapters",
+    "caramelo.application",
+    "caramelo.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "Core stays free of infrastructure libraries"
+type = "forbidden"
+source_modules = ["caramelo.domain", "caramelo.application"]
+forbidden_modules = [
+    "alembic",
+    "httpx",
+    "procrastinate",
+    "psycopg",
+    "pydantic",
+    "pydantic_settings",
+    "selectolax",
+    "sqlalchemy",
+]
+
+[[tool.importlinter.contracts]]
+name = "Adapters are independent of each other"
+type = "independence"
+modules = [
+    "caramelo.adapters.affiliate",
+    "caramelo.adapters.clock",
+    "caramelo.adapters.copywriting",
+    "caramelo.adapters.http",
+    "caramelo.adapters.persistence",
+    "caramelo.adapters.queue",
+]

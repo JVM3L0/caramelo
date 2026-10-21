@@ -1,0 +1,50 @@
+# `podman compose up -d` (or `docker compose up -d`).
+# Image names are fully qualified because Podman does not assume docker.io.
+name: caramelo
+
+x-app: &app
+  image: localhost/caramelo:dev
+  build:
+    context: .
+    dockerfile: Containerfile
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    CARAMELO_DATABASE_URL: postgresql://caramelo:caramelo@db:5432/caramelo
+
+services:
+  db:
+    image: docker.io/timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: caramelo
+      POSTGRES_PASSWORD: caramelo
+      POSTGRES_DB: caramelo
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caramelo -d caramelo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  db-data:

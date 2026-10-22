@@ -1,7 +1,9 @@
 import argparse
 import asyncio
 import logging
+import os
 from datetime import timedelta
+from pathlib import Path
 
 from caramelo.adapters.persistence import migrate
 from caramelo.adapters.queue import procrastinate as queue
@@ -17,6 +19,25 @@ def parse_duration(text: str) -> timedelta:
         return durations.parse_duration(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+
+
+def dashboard_log_file() -> Path:
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    return state / "caramelo" / "dashboard.log"
+
+
+def configure_logging(command: str, dashboard_log: Path | None = None) -> None:
+    """Logs go to the terminal, except for the dashboard: it owns the screen, so anything
+    written there would be drawn over the interface. Its warnings go to a file instead."""
+    if command == "dashboard":
+        path = dashboard_log or dashboard_log_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        logging.basicConfig(level=logging.WARNING, format=LOG_FORMAT, filename=path, force=True)
+    else:
+        logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, force=True)
 
 
 MAX_SEED_PAGES = 10
@@ -132,7 +153,7 @@ def main(argv: list[str] | None = None) -> None:
     dashboard.add_argument("--refresh", type=float, help="seconds between updates (default 5)")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging(args.command)
     settings = Settings()
     match args.command:
         case "migrate":

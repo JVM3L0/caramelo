@@ -28,6 +28,8 @@ identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-br
   SQL (`adapters/persistence/dashboard.py`) e no Procrastinate (`adapters/queue/stats.py`). Uma
   interface web futura reaproveita as mesmas consultas.
 - Configuração `CARAMELO_DASHBOARD_REFRESH_SECONDS` (5).
+- Os logs do painel vão para `~/.local/state/caramelo/dashboard.log` (só avisos e erros). Antes, o
+  nível INFO do CLI escrevia no terminal e podia desenhar linhas por cima da interface.
 
 ## [0.2.2] - Semear o catálogo (fase 1: coleta)
 

@@ -9,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from caramelo.adapters.affiliate.passthrough import PassthroughAffiliateLinker
 from caramelo.adapters.clock import SystemClock
 from caramelo.adapters.copywriting.template import TemplateCopyWriter
+from caramelo.adapters.persistence.dashboard import SqlDashboardQueries
 from caramelo.adapters.persistence.repositories import SqlUnitOfWork
 from caramelo.adapters.queue import procrastinate as queue
+from caramelo.adapters.queue.stats import ProcrastinateQueueStatistics
 from caramelo.adapters.sources.http import Throttle, build_http_client
 from caramelo.adapters.sources.kabum import KabumSource
 from caramelo.application import jobs
+from caramelo.application.dashboard import DashboardQueries, QueueStatistics
 from caramelo.application.jobs import JobHandler
 from caramelo.application.ports import (
     AffiliateLinker,
@@ -47,6 +50,12 @@ class Container:
 
     def uow(self) -> SqlUnitOfWork:
         return SqlUnitOfWork(self.engine)
+
+    def dashboard_queries(self) -> DashboardQueries:
+        return SqlDashboardQueries(self.engine)
+
+    def queue_statistics(self) -> QueueStatistics:
+        return ProcrastinateQueueStatistics(self.queue_app)
 
     def monitor_listing(self) -> MonitorListing:
         return MonitorListing(self.sources, self.uow, self.clock)

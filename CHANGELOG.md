@@ -3,6 +3,23 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A versão minor
 identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-branch sobe o patch.
 
+## [0.2.3] - Dashboard no terminal (fase 1: coleta)
+
+### Adicionado
+- `caramelo dashboard [--refresh 5]`: painel no terminal (Textual), **somente leitura**: lê o banco e
+  nunca fala com a loja, então olhar o painel não gera nenhuma requisição.
+  - **Visão geral:** por loja, o estado (coletando, atrasado, parado, aguardando), anúncios
+    monitorados, esgotados, última e próxima coleta, pontos de preço, atrasados e a carga estimada em
+    requisições por hora; e a fila de jobs (pendentes, em execução, falhas e o mais antigo pendente).
+  - **Anúncios:** tabela com preço no Pix e no cartão, variação contra a coleta anterior (▼ verde,
+    ▲ vermelho), estoque, número de coletas e idade. Busca por nome (`/`), filtro de estoque (`e`),
+    só mudanças de preço (`m`) e ordem (`o`: recentes, menor preço, maiores quedas, nome).
+  - Se o banco cair, mostra o aviso e mantém os últimos dados na tela.
+- Portas de leitura `DashboardQueries` e `QueueStatistics` (camada de aplicação), com adapters em
+  SQL (`adapters/persistence/dashboard.py`) e no Procrastinate (`adapters/queue/stats.py`). Uma
+  interface web futura reaproveita as mesmas consultas.
+- Configuração `CARAMELO_DASHBOARD_REFRESH_SECONDS` (5).
+
 ## [0.2.2] - Semear o catálogo (fase 1: coleta)
 
 ### Adicionado

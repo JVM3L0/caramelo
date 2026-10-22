@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # How long a store is left alone after it blocks us (a Retry-After header wins).
     source_block_cooldown: Duration = timedelta(minutes=30)
 
+    # How often the terminal dashboard re-reads the database, in seconds.
+    dashboard_refresh_seconds: float = 5.0
+
     # Pluggable choices: add a value here plus a branch in the container.
     affiliate_linker: Literal["passthrough"] = "passthrough"
     copywriter: Literal["template"] = "template"

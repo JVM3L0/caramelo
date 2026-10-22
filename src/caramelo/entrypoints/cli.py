@@ -63,6 +63,23 @@ async def _watch(settings: Settings, url: str, every: timedelta) -> None:
     print(f"a cada {every}; preço atual: {monitored.first_price.best}")
 
 
+async def _dashboard(settings: Settings, refresh: float) -> None:
+    from caramelo.entrypoints.tui.app import DashboardApp  # textual is only needed here
+
+    container = build_container(settings)
+    try:
+        async with container.queue_app.open_async():
+            app = DashboardApp(
+                container.dashboard_queries(),
+                container.queue_statistics(),
+                container.clock,
+                refresh,
+            )
+            await app.run_async()
+    finally:
+        await container.aclose()
+
+
 async def _seed(
     settings: Settings, source_id: str, category: str, pages: int, every: timedelta
 ) -> None:
@@ -109,6 +126,10 @@ def main(argv: list[str] | None = None) -> None:
         help="category pages to read, 60 products each (default 1)",
     )
     seed.add_argument("--every", type=parse_duration, help="collection interval, e.g. 2h")
+    dashboard = commands.add_parser(
+        "dashboard", help="terminal dashboard with the collection status (read-only)"
+    )
+    dashboard.add_argument("--refresh", type=float, help="seconds between updates (default 5)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -118,6 +139,8 @@ def main(argv: list[str] | None = None) -> None:
             asyncio.run(_migrate(settings))
         case "worker":
             asyncio.run(_worker(settings))
+        case "dashboard":
+            asyncio.run(_dashboard(settings, args.refresh or settings.dashboard_refresh_seconds))
         case "seed":
             every = args.every or settings.seed_collect_interval
             asyncio.run(_seed(settings, args.source, args.category, args.pages, every))

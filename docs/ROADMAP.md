@@ -59,7 +59,10 @@ Objetivo: começar a acumular histórico o quanto antes, porque a fase 3 depende
    - só caminhos de categoria simples (nada de busca, carrinho, `sort=` ou `?query=`), no máximo
      10 páginas por descoberta;
    - coletas espalhadas no tempo, e o `seed` mostra o custo estimado antes de enfileirar.
-6. **Testes** dos adapters com páginas reais reduzidas, salvas como fixtures.
+6. **Dashboard no terminal** (entregue em `0.2.3`): `caramelo dashboard` mostra a saúde da coleta e
+   os anúncios, só lendo o banco. Serve para acompanhar o critério de 7 dias sem rodar SQL à mão.
+   Histórico por anúncio (gráfico), fila detalhada e logs ficam para uma segunda leva.
+7. **Testes** dos adapters com páginas reais reduzidas, salvas como fixtures.
 
 **Pronto quando:** o worker coleta sozinho, sem intervenção, por 7 dias seguidos, e cada anúncio
 monitorado tem pontos de preço no período.

@@ -3,6 +3,41 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A versão minor
 identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-branch sobe o patch.
 
+## [0.2.3] - Dashboard no terminal (fase 1: coleta)
+
+### Adicionado
+- `caramelo dashboard [--refresh 5]`: painel no terminal (Textual), **somente leitura**: lê o banco e
+  nunca fala com a loja, então olhar o painel não gera nenhuma requisição.
+  - **Visão geral:** por loja, o estado (coletando, atrasado, parado, aguardando), anúncios
+    monitorados, esgotados, última e próxima coleta, pontos de preço, atrasados e a carga estimada em
+    requisições por hora; e a fila de jobs (pendentes, em execução, falhas e o mais antigo pendente).
+  - **Anúncios:** tabela com preço no Pix e no cartão, uma **tendência** (mini-gráfico dos últimos
+    preços, verde se caiu e vermelho se subiu), a variação contra a coleta anterior (▼ verde,
+    ▲ vermelho), estoque, número de coletas e idade. Busca por nome (`/`), filtro de estoque (`e`),
+    só mudanças de preço (`m`) e ordem (`o`: recentes, menor preço, maiores quedas, nome).
+  - **Histórico** (Enter num anúncio): gráfico do preço no Pix e no cartão dos últimos 30 dias, em
+    degraus (o preço de uma loja fica fixo até mudar), com menor, mediana, maior e preço atual, o
+    quanto o atual está abaixo ou acima da mediana, e a lista das últimas coletas. Coletas esgotadas
+    não entram no gráfico.
+  - **Atividade da coleta** na Visão geral: pontos de preço por hora nas últimas 24 h, com as horas
+    vazias, para ver se o worker está regular.
+  - Se o banco cair, mostra o aviso e mantém os últimos dados na tela.
+- Gráficos com `textual-plotext`; o resumo do histórico (`summarize`) é uma função pura da camada de
+  aplicação, que a fase 3 pode reaproveitar para a mediana de "desconto real".
+- Portas de leitura `DashboardQueries` e `QueueStatistics` (camada de aplicação), com adapters em
+  SQL (`adapters/persistence/dashboard.py`) e no Procrastinate (`adapters/queue/stats.py`). Uma
+  interface web futura reaproveita as mesmas consultas.
+- Configuração `CARAMELO_DASHBOARD_REFRESH_SECONDS` (5).
+- Os logs do painel vão para `~/.local/state/caramelo/dashboard.log` (só avisos e erros). Antes, o
+  nível INFO do CLI escrevia no terminal e podia desenhar linhas por cima da interface.
+
+### Corrigido
+- **Estoque na leitura de categorias do Kabum.** O `quantity` da listagem é o estoque da *campanha*,
+  não do produto: os itens fora de campanha vêm com 0 e continuam à venda (a página do produto os
+  mostra como disponíveis). A 0.2.2 os marcava como esgotados. Agora vale o `available`, e uma
+  campanha esgotada (`quantityAvailable` 0) volta ao preço base. Os pontos já gravados com o erro
+  (a primeira coleta de produtos sem campanha) continuam no histórico.
+
 ## [0.2.2] - Semear o catálogo (fase 1: coleta)
 
 ### Adicionado

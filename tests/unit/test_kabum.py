@@ -255,12 +255,33 @@ class TestParseCategoryPage:
         assert husky.pix == Price.from_reais("2999.99")
         assert husky.card == Price.from_reais("3529.40")
 
-    def test_sold_out_items_keep_their_prices_but_are_out_of_stock(self) -> None:
+    def test_products_outside_a_campaign_are_in_stock_despite_quantity_zero(self) -> None:
+        # The item's `quantity` is the campaign's stock: 0 here, yet the product page
+        # of this very item shows it as buyable.
         offers, _ = parse_category_page(CATEGORY_FIXTURE.read_text(), DURING_OFFER)
 
         msi = next(o for o in offers if o.external_id == "997882")
-        assert not msi.in_stock  # `available` is true, the quantity is 0
+        assert msi.in_stock
         assert msi.pix == Price.from_reais("2699.99")
+        assert msi.card == Price.from_reais("3176.46")
+
+    def test_an_unavailable_item_is_out_of_stock(self) -> None:
+        html = CATEGORY_FIXTURE.read_text().replace(r"\"available\": true", r"\"available\": false")
+
+        offers, _ = parse_category_page(html, DURING_OFFER)
+
+        assert not any(o.in_stock for o in offers)
+
+    def test_a_sold_out_campaign_falls_back_to_the_base_price(self) -> None:
+        sold_out = CATEGORY_FIXTURE.read_text().replace(
+            r"\"quantityAvailable\": 196", r"\"quantityAvailable\": 0"
+        )
+
+        offers, _ = parse_category_page(sold_out, DURING_OFFER)
+
+        husky = next(o for o in offers if o.external_id == "996572")
+        assert husky.pix == Price.from_reais("2999.99")  # base price, not the campaign's
+        assert husky.in_stock
 
     def test_marketplace_sellers_are_left_out(self) -> None:
         offers, _ = parse_category_page(CATEGORY_FIXTURE.read_text(), DURING_OFFER)

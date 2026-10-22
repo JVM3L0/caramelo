@@ -5,7 +5,9 @@
   `prices.priceWithDiscount` the Pix price; both already reflect an active campaign.
 - Category page (/<category>?page_number=N): the same kind of payload, 60 products per
   request, used to discover products and to read their first prices cheaply. There the
-  base prices sit on the item and an active campaign's prices sit under `offer`.
+  base prices sit on the item and an active campaign's prices sit under `offer`. The item's
+  `quantity` is the stock of the *campaign*, not of the product: products outside any
+  campaign have 0 and are still on sale (their product page says "Comprar", InStock).
 
 Rate limiting: every request goes through the shared Throttle, and a block (403, 429 or
 the verification page) puts the source in a cooldown during which no request is made.
@@ -165,6 +167,8 @@ def _active_offer(item: dict[str, Any], now: datetime) -> dict[str, Any] | None:
     offer = item.get("offer")
     if not offer or offer.get("isPrimeExclusive"):  # membership-only prices are not public
         return None
+    if offer.get("quantityAvailable") == 0:  # campaign sold out: the base price applies
+        return None
     if offer["startsAt"] <= now.timestamp() <= offer["endsAt"]:
         return offer
     return None
@@ -205,8 +209,8 @@ def parse_category_page(html: str, now: datetime) -> tuple[list[RawOffer], int]:
                     pix=_price(source.get("priceWithDiscount")),
                     card=_price(source.get("price")),
                     installments=int(installments.group(1)) if installments else None,
-                    # Sold-out items keep `available` true; the quantity tells the truth.
-                    in_stock=bool(item.get("available")) and item["quantity"] > 0,
+                    # `quantity` is the campaign's stock, so it says nothing about the product.
+                    in_stock=bool(item.get("available")),
                     seller=item["sellerName"],
                 )
             )

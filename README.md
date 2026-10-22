@@ -63,6 +63,17 @@ O comando mostra o custo estimado e enfileira a descoberta; o worker a executa r
 da loja. Os produtos entram no monitoramento com as primeiras coletas espalhadas ao longo do
 intervalo.
 
+Para acompanhar a coleta, abra o painel no terminal (somente leitura, não contata nenhuma loja):
+
+```bash
+uv run caramelo dashboard          # precisa do banco acessível em localhost:5432
+```
+
+Teclas: `1`/`2`/`3` trocam de aba (visão geral, anúncios, histórico), `Enter` num anúncio abre o
+gráfico do histórico de preço, `/` busca, `e` filtra estoque, `m` só mudanças de preço, `o` muda a
+ordem, `r` atualiza e `q` sai. Os avisos do painel vão para `~/.local/state/caramelo/dashboard.log`,
+porque o terminal está ocupado com a interface.
+
 O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.
 Variáveis úteis: `CARAMELO_DEFAULT_COLLECT_INTERVAL` (padrão `1h`),
 `CARAMELO_SEED_COLLECT_INTERVAL` (padrão `2h`), `CARAMELO_REQUEST_MIN_INTERVAL` (pausa entre

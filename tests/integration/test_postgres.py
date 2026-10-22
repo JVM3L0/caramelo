@@ -1,14 +1,11 @@
 """Runs migrations against a real TimescaleDB container and exercises the SQL adapters."""
 
-from collections.abc import AsyncIterator, Iterator
 from datetime import timedelta
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from testcontainers.postgres import PostgresContainer
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from caramelo.adapters.persistence import migrate, to_sqlalchemy_url
 from caramelo.adapters.persistence.repositories import SqlUnitOfWork
 from caramelo.adapters.persistence.tables import listings, price_points
 from caramelo.adapters.queue import procrastinate as queue
@@ -20,23 +17,6 @@ from tests.factories import raw_offer
 from tests.fakes import FakeClock, FakeSource
 
 pytestmark = pytest.mark.integration
-
-TIMESCALE_IMAGE = "docker.io/timescale/timescaledb:2.17.2-pg16"
-
-
-@pytest.fixture(scope="module")
-def database_url() -> Iterator[str]:
-    with PostgresContainer(TIMESCALE_IMAGE, driver=None) as pg:
-        url = pg.get_connection_url()
-        migrate.upgrade(to_sqlalchemy_url(url))
-        yield url
-
-
-@pytest.fixture
-async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
-    engine = create_async_engine(to_sqlalchemy_url(database_url))
-    yield engine
-    await engine.dispose()
 
 
 async def test_price_points_is_a_hypertable(engine: AsyncEngine) -> None:

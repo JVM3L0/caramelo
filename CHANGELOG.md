@@ -3,6 +3,19 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A versão minor
 identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-branch sobe o patch.
 
+## [0.2.4] - CI mais rápido (fase 1: coleta)
+
+### Alterado
+- CI em **três jobs paralelos** (lint, tipos e arquitetura; testes unitários; testes de integração).
+  O tempo total passa a ser o do mais lento, em vez da soma. Medido no log de uma execução real do
+  job único (1 min 15 s): pyright 10 s, testes de integração ~48 s, o resto de unitários ~8 s.
+- Testes de integração: **um único container do TimescaleDB por execução** (antes, um por módulo),
+  com um banco migrado para cada módulo. Puxar e iniciar a imagem (730 MB comprimida) foi o maior
+  custo do CI (44 s no primeiro módulo e 4 s no segundo); o segundo módulo cai para ~0,2 s.
+- Cache de `~/.npm` (onde o pyright guarda o que baixa), `concurrency` para cancelar execuções
+  superadas.
+- Saída dos testes da interface sem o painel impresso no log.
+
 ## [0.2.3] - Dashboard no terminal (fase 1: coleta)
 
 ### Adicionado

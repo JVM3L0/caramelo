@@ -1,6 +1,6 @@
 [project]
 name = "caramelo"
-version = "0.2.3"
+version = "0.2.4"
 description = "Farejador de promoções de hardware que publica descontos reais em canais."
 readme = "README.md"
 authors = [

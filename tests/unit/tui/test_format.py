@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 
 import pytest
 from rich.console import Console
@@ -28,7 +29,7 @@ def health(**changes: object) -> SourceHealth:
 
 
 def plain(renderable: object) -> str:
-    console = Console(width=100, record=True, force_terminal=False)
+    console = Console(file=StringIO(), width=100, record=True, force_terminal=False)
     console.print(renderable)
     return console.export_text()
 

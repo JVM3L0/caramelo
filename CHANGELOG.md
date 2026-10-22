@@ -31,6 +31,13 @@ identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-br
 - Os logs do painel vão para `~/.local/state/caramelo/dashboard.log` (só avisos e erros). Antes, o
   nível INFO do CLI escrevia no terminal e podia desenhar linhas por cima da interface.
 
+### Corrigido
+- **Estoque na leitura de categorias do Kabum.** O `quantity` da listagem é o estoque da *campanha*,
+  não do produto: os itens fora de campanha vêm com 0 e continuam à venda (a página do produto os
+  mostra como disponíveis). A 0.2.2 os marcava como esgotados. Agora vale o `available`, e uma
+  campanha esgotada (`quantityAvailable` 0) volta ao preço base. Os pontos já gravados com o erro
+  (a primeira coleta de produtos sem campanha) continuam no histórico.
+
 ## [0.2.2] - Semear o catálogo (fase 1: coleta)
 
 ### Adicionado

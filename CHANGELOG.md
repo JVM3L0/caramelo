@@ -26,6 +26,11 @@ identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-br
 - Falhas que não adianta repetir (`retryable = False`: bloqueio, layout quebrado e categoria
   inválida) não são mais tentadas de novo pela fila.
 
+### Documentação
+- Roadmap: portas `AttributeExtractor`, `ProductLinker` e `KnowledgeBase` na fase 2, e o vínculo
+  avançado de produtos (Levenshtein por token, score composto, NER, base de conhecimento e
+  embeddings) planejado para a fase 7.
+
 ## [0.2.1] - Kabum (fase 1: coleta)
 
 ### Adicionado

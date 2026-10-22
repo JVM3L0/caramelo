@@ -86,6 +86,10 @@ Objetivo: poder dizer "a RTX 4070 Super mais barata do Brasil hoje", e não só 
    - **Fila de revisão** dos não casados e dos de baixa confiança, com correção manual que vale
      mais que a regra (no bot da fase 5).
    - Testes com títulos reais de várias categorias.
+   - **Portas desde já**, com implementação simples: `AttributeExtractor` (título → atributos, por
+     regras e regex) e `ProductLinker` (atributos → produto e família, com confiança), e uma
+     `KnowledgeBase` lida de um arquivo versionado. A fase 7 troca ou acrescenta implementações
+     sem mexer no domínio.
 4. **Filtros de confiança**: descartar usado, recondicionado e kits inesperados. No Mercado Livre,
    aceitar só loja oficial ou vendedor com boa reputação.
 5. **Métricas de custo-benefício**: R$/GB para SSD e RAM.
@@ -155,6 +159,49 @@ Cada item é um adapter novo atrás de um port que já existe, sem mudar o domí
 - **Proxy** (`CARAMELO_HTTP_PROXY`), se as lojas começarem a bloquear.
 - **`CopyWriter` com LLM**: títulos mais chamativos por canal, mantendo o template como reserva.
 - **Card de imagem** com o gráfico de preço de 90 dias.
+
+### Vínculo avançado de produtos
+
+Só depois que as regras da fase 2 estiverem rodando e a fila de revisão tiver exemplos reais.
+Cada item é um adapter novo das portas `AttributeExtractor`, `ProductLinker` e `KnowledgeBase`.
+
+1. **Normalização do título** (se ainda não estiver na fase 2): minúsculas e sem acento, letra
+   separada de número (`RTX5050` → `rtx 5050`), unidades coladas (`8 GB` → `8gb`), palavras vazias
+   removidas e tokens ordenados. Num teste com títulos reais, isso derrubou a distância entre
+   escritas diferentes do mesmo produto de 22 e 19 para 0.
+2. **Distância de Levenshtein por token**, sobre os campos extraídos (marca, linha, nome comercial)
+   comparados com os apelidos da base de conhecimento, nunca sobre o título inteiro.
+   - Tolerância por tipo de token: números, capacidades e sufixos de chip (`ti`, `super`, `xt`)
+     exigem **distância 0**; palavras de marca ou de linha aceitam 1 edição a partir de 5 letras e
+     2 a partir de 9; palavras de até 4 letras exigem 0 (`venus` não vira `ventus`).
+   - Motivo: sobre o texto cru, produtos diferentes ficam mais perto que o mesmo produto escrito de
+     outro jeito (RTX 4070 × 4070 Ti: distância 3; mesmo produto reescrito: 16 a 22).
+   - Implementação: `rapidfuzz.distance.Levenshtein` (com Damerau para letras trocadas) ou a função
+     `levenshtein()` do Postgres; `pg_trgm` para trazer candidatos com índice. **Conferir** se
+     `fuzzystrmatch` e `pg_trgm` estão na imagem do TimescaleDB.
+3. **Score composto** e três faixas de decisão: alta confiança liga sozinho, a faixa do meio vai
+   para a fila de revisão e a baixa fica sem vínculo. Componentes: atributos duros iguais (senão
+   descarta), EAN/MPN, marca, distância dos tokens e verificação de preço (item 6). Os limiares
+   saem dos exemplos revisados, medindo os erros que cada um deixaria passar, e não de chute.
+4. **Reconhecimento de entidades (NER)**: primeiro regras e dicionário, que cobrem bem um
+   vocabulário fechado; um modelo próprio (por exemplo spaCy) ou um LLM com cache por título só se
+   as regras pararem de evoluir. Os títulos corrigidos na fila de revisão viram os exemplos de
+   treino.
+5. **Base de conhecimento de especificações** (chips, linhas, MPN, EAN, apelidos e atributos):
+   - nasce como arquivo versionado no repositório, com a **procedência** de cada dado (fonte e
+     data da conferência), alimentado pelos chips que aparecem nos títulos reais e pelos produtos
+     aprovados na fila de revisão;
+   - fontes só depois de **ler os termos e a licença de cada uma** (dados abertos como o Wikidata,
+     páginas oficiais dos fabricantes e as fichas das próprias lojas); sites de terceiros que
+     proíbam coleta automatizada ficam de fora;
+   - se uma importação automática compensar, vira um adapter novo no molde das lojas.
+6. **Verificação por distância de preço**: um anúncio ligado a uma família cujo preço está muito
+   longe da mediana dela (um suporte de GPU de R$ 41 numa família de R$ 2.000) é quase certamente
+   um vínculo errado ou um acessório. Também serve à fase 3 para tirar acessórios do cálculo da
+   mediana, e é barato o bastante para antecipar se fizer falta.
+7. **Embeddings (`pgvector`)**: apenas como gerador de candidatos e para sinônimos e idiomas
+   (`GPU` = `placa de vídeo`). Nunca decidem sozinhos, porque números e sufixos curtos mudam pouco o
+   vetor (`4070` e `4070 Ti` ficam muito próximos).
 
 ## Fase 8: Expansão e SaaS
 

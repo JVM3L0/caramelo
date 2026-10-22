@@ -3,6 +3,19 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A versão minor
 identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-branch sobe o patch.
 
+## [0.2.4] - CI mais rápido (fase 1: coleta)
+
+### Alterado
+- CI em **três jobs paralelos** (lint, tipos e arquitetura; testes unitários; testes de integração).
+  O tempo total passa a ser o do mais lento, em vez da soma de tudo, e os testes unitários dão
+  retorno em segundos sem esperar o banco.
+- `actions/setup-python` antes do `uv`: o runner já traz o Python 3.13, então o `uv` não baixa uma
+  cópia a cada execução. Cache de `~/.npm`, onde o pyright guarda o que baixa num runner frio.
+- `concurrency`: um push novo na mesma branch ou PR cancela a execução anterior.
+- Testes de integração: **um único container do TimescaleDB por execução** (antes, um por módulo),
+  com um banco migrado para cada módulo. A imagem tem ~1,9 GB, então puxá-la e iniciá-la é a parte
+  cara; a preparação do segundo módulo caiu de 4,2 s para 0,2 s.
+
 ## [0.2.3] - Dashboard no terminal (fase 1: coleta)
 
 ### Adicionado

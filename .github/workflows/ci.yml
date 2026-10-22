@@ -5,19 +5,69 @@ on:
   push:
     branches: [main, develop]
 
+# A newer push to the same branch or PR makes the run in progress pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Three independent jobs run side by side, so the wall time is the slowest one (the
+# integration tests, which pull a ~2 GB TimescaleDB image) and not the sum of everything.
 jobs:
-  checks:
+  static:
+    name: Lint, tipos e arquitetura
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # The runner image ships Python 3.13 in its tool cache; without this uv would
+      # download its own copy on every run.
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.13.2"
           enable-cache: true
+      # pyright's PyPI package fetches the real pyright through npx on a cold runner.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-pyright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run lint-imports
-      # Docker is available on the runner, so the testcontainers suite runs too.
-      - run: uv run pytest
+
+  unit:
+    name: Testes unitários
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.2"
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -m "not integration"
+
+  integration:
+    name: Testes de integração (TimescaleDB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.2"
+          enable-cache: true
+      # Docker is available on the runner; testcontainers starts the database itself.
+      - run: uv sync --locked
+      - run: uv run pytest -m integration --durations=5

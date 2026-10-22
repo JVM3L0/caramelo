@@ -9,7 +9,8 @@ from caramelo.adapters.clock import SystemClock
 from caramelo.adapters.copywriting.template import TemplateCopyWriter
 from caramelo.adapters.persistence.repositories import SqlUnitOfWork
 from caramelo.adapters.queue import procrastinate as queue
-from caramelo.adapters.sources.http import build_http_client
+from caramelo.adapters.sources.http import Throttle, build_http_client
+from caramelo.adapters.sources.kabum import KabumSource
 from caramelo.application import jobs
 from caramelo.application.jobs import JobHandler
 from caramelo.application.ports import (
@@ -36,7 +37,7 @@ class Container:
     copywriter: CopyWriter
     queue_app: procrastinate.App
     task_queue: TaskQueue
-    # Store integrations register here as they are built (Kabum, Mercado Livre...).
+    # Store integrations, by source id.
     sources: dict[SourceId, DealSource] = field(default_factory=dict)
 
     def uow(self) -> SqlUnitOfWork:
@@ -74,13 +75,16 @@ def build_container(settings: Settings) -> Container:
             copywriter = TemplateCopyWriter()
 
     queue_app = queue.create_app(settings.database_url)
+    http = build_http_client(settings.http_user_agent, settings.http_proxy)
+    kabum = KabumSource(http, Throttle(settings.request_min_interval))
     return Container(
         settings=settings,
         engine=create_async_engine(settings.sqlalchemy_url, pool_pre_ping=True),
-        http=build_http_client(settings.http_user_agent, settings.http_proxy),
+        http=http,
         clock=SystemClock(),
         affiliate=affiliate,
         copywriter=copywriter,
         queue_app=queue_app,
         task_queue=queue.ProcrastinateTaskQueue(queue_app),
+        sources={kabum.id: kabum},
     )

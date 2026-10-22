@@ -14,7 +14,14 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - `Throttle`: intervalo mínimo entre requisições à mesma loja (`CARAMELO_REQUEST_MIN_INTERVAL`).
 - CI no GitHub Actions: ruff, pyright, import-linter e pytest (incluindo integração).
 
+- Integração com o Kabum (`adapters/sources/kabum.py`): lê a página pública do produto
+  (`/produto/<código>`), com preço no Pix, preço no cartão, parcelas e estoque. Identifica o bot
+  honestamente (`CarameloBot`) e passa pelo `Throttle`. Bloqueios (403, 429 ou a página de
+  verificação) viram erro e o job tenta de novo; produto removido (404) é ignorado.
+
 ### Alterado
+- O MVP passou a usar o **Kabum** como primeira loja: a API do Mercado Livre não entrega preços
+  (busca e itens retornam 403, catálogo vem sem oferta) e as páginas dele exigem verificação de conta.
 - `DealSource` agora busca produtos específicos (`fetch(external_ids)`) e reconhece URLs da própria
   loja (`external_id_from_url`). `CollectSource` virou `CollectListings`.
 - `TaskQueue.enqueue` aceita `lock`.

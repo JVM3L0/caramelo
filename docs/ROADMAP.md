@@ -6,7 +6,7 @@ As fases 1 a 5 formam o MVP: o BuscaPC publicando ofertas reais de forma automá
 | Fase | Nome                         | Resultado                                              |
 |------|------------------------------|--------------------------------------------------------|
 | 0    | Fundação ✅                  | Esqueleto, banco, fila e testes rodando em containers  |
-| 1    | Coleta                       | Histórico de preços de Kabum e Mercado Livre crescendo |
+| 1    | Coleta                       | Histórico de preços do Kabum crescendo                 |
 | 2    | Catálogo                     | Anúncios agrupados por produto e por família (chip)    |
 | 3    | Análise e detecção           | Regras de "desconto real" calibradas com dados         |
 | 4    | Publicação                   | Ofertas saindo nos canais Geral e Alertas              |
@@ -37,16 +37,13 @@ Objetivo: começar a acumular histórico o quanto antes, porque a fase 3 depende
 1. **Catálogo monitorado.** Comando `caramelo watch <url> --every 30m` (CLI provisória até o bot da fase 5)
    que cadastra um anúncio para coleta. Semear algumas centenas de SKUs relevantes: GPUs, CPUs,
    SSDs, RAM, monitores e periféricos populares.
-2. **Adapter Mercado Livre** (API oficial).
-   - Confirmar o acesso atual à API (credenciais do app, token) e os limites de requisição.
-   - Buscar por item monitorado, além de busca por categoria para descobrir novos anúncios.
-   - Guardar vendedor e reputação no `RawOffer` para os filtros da fase 2.
-3. **Adapter Kabum** (scraping com httpx + selectolax).
-   - Ler os termos de uso e o `robots.txt` antes de começar.
-   - Extrair preço no Pix, preço no cartão, parcelas, estoque, título e código do produto.
-     Primeiro tentar os dados estruturados embutidos na página (JSON); HTML só como reserva.
-   - Playwright só se a página exigir JavaScript.
-4. **Agendamento.** Jobs periódicos do Procrastinate por fonte, com frequência adaptativa por
+2. **Adapter Kabum** (entregue): lê a página pública do produto (dados embutidos do Next.js e
+   JSON-LD), sem API. Só páginas de produto, que o `robots.txt` permite; ritmo baixo e User-Agent
+   honesto. **Pendente:** ler os termos de uso do Kabum.
+3. **Mercado Livre fica para depois**: a API não entrega preços (busca e itens dão 403, o catálogo
+   vem sem oferta) e as páginas de produto redirecionam para uma verificação de conta anti-robô.
+   Só vale retomar com acesso oficial ou feed de parceiros.
+4. **Agendamento** (entregue na sub-branch `catalogo-monitorado`). Jobs periódicos do Procrastinate por fonte, com frequência adaptativa por
    anúncio: GPUs e ofertas relâmpago a cada poucos minutos, itens estáveis algumas vezes por dia.
 5. **Boas maneiras com as lojas.** Limite de requisições por loja, pausa entre páginas, retentativa
    com espera crescente e um único worker por loja (lock do Procrastinate).
@@ -141,7 +138,7 @@ Cada item é um adapter novo atrás de um port que já existe, sem mudar o domí
 
 ## Fase 8: Expansão e SaaS
 
-- **Mais lojas**: Pichau, Terabyte, Amazon e AliExpress (canal separado).
+- **Mais lojas**: Mercado Livre (se houver acesso oficial), Pichau, Terabyte, Amazon e AliExpress (canal separado).
 - **Mais canais**: Discord, WhatsApp e e-mail com resumo diário.
 - **Alertas pessoais**: `/alerta rtx 4070 < 3500` no privado do bot.
 - **SaaS**: cadastro de outros donos de canal, cada um com seus canais, regras e tag de afiliado;

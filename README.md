@@ -48,8 +48,8 @@ Os testes de integração usam testcontainers. Com Podman, exporte antes:
 ## Uso
 
 ```bash
-# monitorar um produto (a loja é reconhecida pela URL; requer a integração da loja, fase 1)
-podman compose run --rm worker watch https://... --every 30m
+# monitorar um produto (a loja é reconhecida pela URL; hoje só o Kabum)
+podman compose run --rm worker watch https://www.kabum.com.br/produto/996572 --every 30m
 ```
 
 O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.

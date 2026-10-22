@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from io import StringIO
 
 from rich.console import Console
 from textual.widgets import DataTable, Input, Static, TabbedContent
@@ -98,7 +99,7 @@ def build(rows: list[ListingRow]) -> tuple[DashboardApp, FakeQueries]:
 
 
 def overview_text(app: DashboardApp) -> str:
-    console = Console(width=100, record=True, force_terminal=False)
+    console = Console(file=StringIO(), width=100, record=True, force_terminal=False)
     console.print(app.query_one("#overview-box", Static).content)
     return console.export_text()
 

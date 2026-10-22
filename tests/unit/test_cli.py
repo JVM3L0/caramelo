@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pytest
 
-from caramelo.entrypoints.cli import parse_duration
+from caramelo.entrypoints.cli import describe_seed, parse_duration
 
 
 @pytest.mark.parametrize(
@@ -18,3 +18,11 @@ def test_parse_duration(text: str, expected: timedelta) -> None:
 def test_parse_duration_rejects_garbage(text: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         parse_duration(text)
+
+
+def test_describe_seed_states_the_cost_before_anything_is_sent() -> None:
+    text = describe_seed("hardware/ssd", pages=2, every=timedelta(hours=2), request_min_interval=2)
+
+    assert "até 2 requisição(ões)" in text
+    assert "até 120 produtos" in text
+    assert "~60 requisições/hora" in text  # 120 products every 2 h

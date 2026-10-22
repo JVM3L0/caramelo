@@ -1,9 +1,21 @@
 from datetime import timedelta
-from typing import Literal
+from typing import Annotated, Any, Literal
 
+from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from caramelo.adapters.persistence import to_sqlalchemy_url
+from caramelo.entrypoints.durations import parse_duration
+
+
+def _duration(value: Any) -> Any:
+    """Accepts 30m / 2h / 1d; ISO 8601 (PT30M) and non-strings are left to pydantic."""
+    if isinstance(value, str) and not value.upper().startswith("P"):
+        return parse_duration(value)
+    return value
+
+
+Duration = Annotated[timedelta, BeforeValidator(_duration)]
 
 
 class Settings(BaseSettings):
@@ -20,9 +32,13 @@ class Settings(BaseSettings):
     http_proxy: str | None = None
 
     # Collection pacing. Per-listing intervals can override the default.
-    default_collect_interval: timedelta = timedelta(hours=1)
+    default_collect_interval: Duration = timedelta(hours=1)
+    # Interval given to products found by `caramelo seed` (kept gentle on purpose).
+    seed_collect_interval: Duration = timedelta(hours=2)
     # Minimum pause between two requests to the same store.
     request_min_interval: float = 2.0
+    # How long a store is left alone after it blocks us (a Retry-After header wins).
+    source_block_cooldown: Duration = timedelta(minutes=30)
 
     # Pluggable choices: add a value here plus a branch in the container.
     affiliate_linker: Literal["passthrough"] = "passthrough"

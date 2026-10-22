@@ -6,8 +6,21 @@ from collections.abc import Awaitable, Callable
 # is ignored.
 type JobHandler = Callable[..., Awaitable[object]]
 
+
+class JobFailure(Exception):
+    """A failure that knows whether repeating the job could help.
+
+    `retryable = False` is for blocks and broken layouts: retrying would only send the
+    store more requests. Any other exception keeps the queue's default retry policy.
+    """
+
+    retryable: bool = True
+
+
 # Payload: source_id: str, external_ids: list[str].
 COLLECT_LISTINGS = "collect_listings"
+# Payload: source_id: str, category: str, max_pages: int, interval_seconds: int.
+DISCOVER_LISTINGS = "discover_listings"
 # Periodic, no payload.
 SCHEDULE_DUE_COLLECTIONS = "schedule_due_collections"
 

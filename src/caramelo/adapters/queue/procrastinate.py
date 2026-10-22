@@ -8,12 +8,24 @@ from collections.abc import Mapping
 from typing import Any
 
 import procrastinate
+from procrastinate.jobs import Job
+from procrastinate.retry import RetryDecision
 
 from caramelo.application.jobs import JobHandler
 from caramelo.application.ports import JobPayload
 
-# 3 attempts in total, waiting 5s, then 10s (exponential).
-RETRY = procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5)
+
+class _Retry(procrastinate.RetryStrategy):
+    """3 attempts in total, waiting 5s then 10s, except for failures that say retrying
+    is pointless (`retryable = False`), such as a block by the store."""
+
+    def get_retry_decision(self, *, exception: BaseException, job: Job) -> RetryDecision | None:
+        if getattr(exception, "retryable", True) is False:
+            return None
+        return super().get_retry_decision(exception=exception, job=job)
+
+
+RETRY = _Retry(max_attempts=3, exponential_wait=5)
 
 
 def create_app(conninfo: str) -> procrastinate.App:

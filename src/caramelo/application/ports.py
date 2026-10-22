@@ -36,6 +36,11 @@ class DealSource(Protocol):
         """Current offers for the given products; missing products are skipped."""
         ...
 
+    def discover(self, category: str, max_pages: int) -> AsyncIterator[RawOffer]:
+        """Offers listed in a category, up to `max_pages` pages. Costs one request per
+        page, so it is the cheap way to find many products and read their prices."""
+        ...
+
 
 # --- Driven ports: persistence ----------------------------------------------
 

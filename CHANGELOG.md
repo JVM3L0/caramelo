@@ -3,6 +3,34 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A versão minor
 identifica a fase do [roadmap](docs/ROADMAP.md) (`0.2.x` = fase 1) e cada sub-branch sobe o patch.
 
+## [0.2.2] - Semear o catálogo (fase 1: coleta)
+
+### Adicionado
+- `caramelo seed <loja> <categoria> [--pages N] [--every 2h]`: descobre os produtos de uma categoria
+  e os coloca em monitoramento, executado pelo worker. Mostra antes o custo estimado em requisições.
+  A página de categoria já traz os preços (1 requisição para até 60 produtos), então o primeiro
+  ponto de preço de cada produto não custa nada a mais. As primeiras coletas são espalhadas ao longo
+  do intervalo e produtos já monitorados mantêm o seu agendamento.
+- `DealSource.discover(category, max_pages)` e o caso de uso `SeedCatalog`.
+- Kabum: leitura de páginas de categoria (só produtos vendidos pelo próprio KaBuM!; preço de
+  campanha ativa no lugar do preço base; item com `quantity` 0 conta como esgotado).
+- **Rate limit:** repouso da loja após bloqueio (30 min ou `Retry-After`, no máximo 6 h), sem
+  requisições durante o repouso; categorias validadas (nada que o `robots.txt` proíba) e limite de
+  10 páginas por descoberta; novas configurações `CARAMELO_SEED_COLLECT_INTERVAL` e
+  `CARAMELO_SOURCE_BLOCK_COOLDOWN`.
+
+### Alterado
+- Cada salto de redirect passa pelo `Throttle` (antes o `httpx` seguia sozinho e o ritmo real era o
+  dobro do configurado), e a URL final do produto é lembrada para não repetir o salto. Um redirect
+  para a página de verificação não é mais seguido, porque o `robots.txt` a proíbe.
+- Falhas que não adianta repetir (`retryable = False`: bloqueio, layout quebrado e categoria
+  inválida) não são mais tentadas de novo pela fila.
+
+### Documentação
+- Roadmap: portas `AttributeExtractor`, `ProductLinker` e `KnowledgeBase` na fase 2, e o vínculo
+  avançado de produtos (Levenshtein por token, score composto, NER, base de conhecimento e
+  embeddings) planejado para a fase 7.
+
 ## [0.2.1] - Kabum (fase 1: coleta)
 
 ### Adicionado

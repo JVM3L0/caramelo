@@ -52,9 +52,24 @@ Os testes de integração usam testcontainers. Com Podman, exporte antes:
 podman compose run --rm worker watch https://www.kabum.com.br/produto/996572 --every 30m
 ```
 
+Para encher o catálogo, descubra os produtos de uma categoria (uma requisição por página, 60
+produtos cada):
+
+```bash
+podman compose run --rm worker seed kabum hardware/placa-de-video-vga --pages 1 --every 2h
+```
+
+O comando mostra o custo estimado e enfileira a descoberta; o worker a executa respeitando o ritmo
+da loja. Os produtos entram no monitoramento com as primeiras coletas espalhadas ao longo do
+intervalo.
+
 O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.
-Variáveis úteis: `CARAMELO_DEFAULT_COLLECT_INTERVAL` (padrão `1h`) e
-`CARAMELO_REQUEST_MIN_INTERVAL` (pausa entre requisições à mesma loja, em segundos).
+Variáveis úteis: `CARAMELO_DEFAULT_COLLECT_INTERVAL` (padrão `1h`),
+`CARAMELO_SEED_COLLECT_INTERVAL` (padrão `2h`), `CARAMELO_REQUEST_MIN_INTERVAL` (pausa entre
+requisições à mesma loja, em segundos) e `CARAMELO_SOURCE_BLOCK_COOLDOWN` (repouso após um bloqueio).
+
+**Rate limit:** toda requisição à loja passa por um único caminho que respeita a pausa mínima (também
+nos redirects), coleta uma loja por vez e entra em repouso se a loja bloquear, sem tentar de novo.
 
 ## Contribuindo
 

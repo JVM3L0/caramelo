@@ -34,20 +34,32 @@ As fases 1 a 5 formam o MVP: o BuscaPC publicando ofertas reais de forma automá
 
 Objetivo: começar a acumular histórico o quanto antes, porque a fase 3 depende de semanas de dados.
 
-1. **Catálogo monitorado.** Comando `caramelo watch <url> --every 30m` (CLI provisória até o bot da fase 5)
-   que cadastra um anúncio para coleta. Semear algumas centenas de SKUs relevantes: GPUs, CPUs,
-   SSDs, RAM, monitores e periféricos populares.
-2. **Adapter Kabum** (entregue): lê a página pública do produto (dados embutidos do Next.js e
-   JSON-LD), sem API. Só páginas de produto, que o `robots.txt` permite; ritmo baixo e User-Agent
-   honesto. **Pendente:** ler os termos de uso do Kabum.
-3. **Mercado Livre fica para depois**: a API não entrega preços (busca e itens dão 403, o catálogo
+1. **Catálogo monitorado** (entregue em `0.2.0`): `caramelo watch <url> --every 30m` cadastra um
+   anúncio (CLI provisória até o bot da fase 5), e o agendador coleta cada anúncio no seu intervalo.
+2. **Adapter Kabum** (entregue em `0.2.1`): lê a página pública do produto (dados embutidos do
+   Next.js e JSON-LD), sem API. Só páginas permitidas pelo `robots.txt`, ritmo baixo e User-Agent
+   honesto. **Pendente:** ler os termos de venda do Kabum (`m.kabum.com.br/checkout/confirmacao/termos/`).
+3. **Semear o catálogo** (entregue em `0.2.2`): `caramelo seed kabum hardware/placa-de-video-vga
+   --pages 1 --every 2h` descobre os produtos de uma categoria. A página de categoria já traz os
+   preços, então 1 requisição cobre até 60 produtos e grava o primeiro ponto de preço de cada um.
+   As primeiras coleções são espalhadas ao longo do intervalo. Só produtos vendidos pelo próprio
+   Kabum (marketplace fica de fora). **Falta:** rodar categoria por categoria (GPU, CPU, SSD, RAM,
+   monitor, periféricos) e acompanhar a carga.
+4. **Mercado Livre fica para depois**: a API não entrega preços (busca e itens dão 403, o catálogo
    vem sem oferta) e as páginas de produto redirecionam para uma verificação de conta anti-robô.
    Só vale retomar com acesso oficial ou feed de parceiros.
-4. **Agendamento** (entregue na sub-branch `catalogo-monitorado`). Jobs periódicos do Procrastinate por fonte, com frequência adaptativa por
-   anúncio: GPUs e ofertas relâmpago a cada poucos minutos, itens estáveis algumas vezes por dia.
-5. **Boas maneiras com as lojas.** Limite de requisições por loja, pausa entre páginas, retentativa
-   com espera crescente e um único worker por loja (lock do Procrastinate).
-6. **Testes** dos adapters com páginas e respostas reais salvas como fixtures.
+5. **Boas maneiras com as lojas** (entregue, requisito de projeto): todo contato com a loja passa
+   pelo mesmo caminho, que garante:
+   - pausa mínima entre requisições (`CARAMELO_REQUEST_MIN_INTERVAL`, 2 s), contando **cada salto
+     de redirect**, e a URL final é lembrada para não repetir o salto;
+   - um job por loja por vez (lock do Procrastinate), inclusive a descoberta;
+   - em bloqueio (403, 429 ou página de verificação) a loja fica em **repouso** (30 min, ou o
+     `Retry-After`, no máximo 6 h) sem nenhuma requisição, e o job **não** é repetido;
+   - a página de verificação nunca é requisitada (o `robots.txt` a proíbe);
+   - só caminhos de categoria simples (nada de busca, carrinho, `sort=` ou `?query=`), no máximo
+     10 páginas por descoberta;
+   - coletas espalhadas no tempo, e o `seed` mostra o custo estimado antes de enfileirar.
+6. **Testes** dos adapters com páginas reais reduzidas, salvas como fixtures.
 
 **Pronto quando:** o worker coleta sozinho, sem intervenção, por 7 dias seguidos, e cada anúncio
 monitorado tem pontos de preço no período.
@@ -64,8 +76,16 @@ Objetivo: poder dizer "a RTX 4070 Super mais barata do Brasil hoje", e não só 
    - RAM: tipo, capacidade e frequência;
    - SSD: capacidade e interface (NVMe Gen3/Gen4, SATA);
    - monitor: tamanho, resolução e taxa de atualização.
-3. **Casamento de anúncios**: anúncio → produto pelo MPN/EAN quando houver; produto → família pelos
-   atributos extraídos. Fila de "não casados" para revisar manualmente.
+3. **Casamento de anúncios**, em cascata, do mais confiável ao menos: EAN/GTIN, MPN (o Kabum não
+   informa nenhum dos dois, mas o código do fabricante aparece no título), e por fim marca + modelo
+   + atributos extraídos do título. Anúncio → produto → família.
+   - **Só liga com confiança alta.** O ambíguo fica com `product_id` nulo e continua acumulando
+     histórico: um casamento errado é pior que nenhum, porque gera falso "menor preço".
+   - **Origem do vínculo** nos dados (`match_source`: `ean`, `mpn`, `title` ou `manual`, mais a
+     confiança), para reprocessar só os vínculos fracos quando uma regra mudar.
+   - **Fila de revisão** dos não casados e dos de baixa confiança, com correção manual que vale
+     mais que a regra (no bot da fase 5).
+   - Testes com títulos reais de várias categorias.
 4. **Filtros de confiança**: descartar usado, recondicionado e kits inesperados. No Mercado Livre,
    aceitar só loja oficial ou vendedor com boa reputação.
 5. **Métricas de custo-benefício**: R$/GB para SSD e RAM.

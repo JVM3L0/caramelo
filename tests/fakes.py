@@ -27,10 +27,17 @@ class FakeClock:
 class FakeSource:
     """Serves canned offers; URLs look like https://<source_id>.test/<external_id>."""
 
-    def __init__(self, source_id: str, offers: list[RawOffer]) -> None:
+    def __init__(
+        self,
+        source_id: str,
+        offers: list[RawOffer],
+        categories: dict[str, list[RawOffer]] | None = None,
+    ) -> None:
         self._id = SourceId(source_id)
         self._offers = {o.external_id: o for o in offers}
+        self._categories = categories or {}
         self.fetched: list[list[str]] = []
+        self.discovered: list[tuple[str, int]] = []
 
     @property
     def id(self) -> SourceId:
@@ -39,6 +46,11 @@ class FakeSource:
     def external_id_from_url(self, url: str) -> str | None:
         prefix = f"https://{self._id}.test/"
         return url.removeprefix(prefix) if url.startswith(prefix) else None
+
+    async def discover(self, category: str, max_pages: int) -> AsyncIterator[RawOffer]:
+        self.discovered.append((category, max_pages))
+        for offer in self._categories.get(category, []):
+            yield offer
 
     async def fetch(self, external_ids: Sequence[str]) -> AsyncIterator[RawOffer]:
         self.fetched.append(list(external_ids))

@@ -14,10 +14,8 @@ class Settings(BaseSettings):
     # libpq form; procrastinate uses it as-is, SQLAlchemy gets the psycopg variant.
     database_url: str = "postgresql://caramelo:caramelo@localhost:5432/caramelo"
 
-    http_user_agent: str = (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/141.0 Safari/537.36"
-    )
+    # Identifies the bot honestly; stores can contact us through the repository.
+    http_user_agent: str = "CarameloBot/0.2 (+https://github.com/JVM3L0/caramelo; price monitor)"
     # Off for the MVP; set e.g. http://user:pass@host:port to route store traffic.
     http_proxy: str | None = None
 

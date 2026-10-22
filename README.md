@@ -48,8 +48,8 @@ Os testes de integração usam testcontainers. Com Podman, exporte antes:
 ## Uso
 
 ```bash
-# monitorar um produto (a loja é reconhecida pela URL; requer a integração da loja, fase 1)
-podman compose run --rm worker watch https://... --every 30m
+# monitorar um produto (a loja é reconhecida pela URL; hoje só o Kabum)
+podman compose run --rm worker watch https://www.kabum.com.br/produto/996572 --every 30m
 ```
 
 O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.
@@ -59,12 +59,13 @@ Variáveis úteis: `CARAMELO_DEFAULT_COLLECT_INTERVAL` (padrão `1h`) e
 ## Contribuindo
 
 Fluxo: `develop → main`. Cada fase do roadmap tem uma branch `phase/<X.Y.Z>-<slug>` criada a partir de
-`develop`; o trabalho é feito em sub-branches `<tipo>/<X.Y.Z>-<slug>` (`feat`, `fix`, `chore`, `docs`,
+`develop`; o trabalho é feito em sub-branches `<tipo>/<X.Y.Z>-<slug>`, uma versão patch por sub-branch (`feat`, `fix`, `chore`, `docs`,
 `refactor`, `test`) que entram na branch da fase por PR. Ao fim da fase, a branch da fase entra em
-`develop` e é criada a tag `vX.Y.Z`; `main` recebe `develop` quando a fase está estável.
+`develop` e é criada a tag da versão mais alta da fase (`v0.2.N`); `main` recebe `develop` quando a fase está estável.
 
-- A versão pertence à fase: sobe uma vez no `pyproject.toml`; as sub-branches só adicionam linhas ao
-  `CHANGELOG.md`.
+- Versão: a **minor** identifica a fase (`0.2.x` = fase 1) e cada sub-branch sobe o **patch**
+  (`feat/0.2.1-kabum`, `feat/0.2.2-...`). A fase seguinte começa na `0.3.0`. A versão sobe no
+  `pyproject.toml` e ganha uma seção no `CHANGELOG.md`.
 - Antes do PR: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run lint-imports && uv run pytest`.
 
 ## Arquitetura

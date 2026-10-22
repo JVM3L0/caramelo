@@ -168,3 +168,68 @@ async def test_queue_statistics(seeded: str) -> None:
 
     assert (result.pending, result.running, result.failed) == (1, 0, 0)
     assert result.oldest_pending_at is not None
+
+
+async def _listing_ids(queries: SqlDashboardQueries) -> dict:
+    return {r.external_id: r.listing_id for r in await queries.listings(ListingQuery())}
+
+
+async def test_trend_holds_the_recent_prices_oldest_first(seeded: str, engine: AsyncEngine) -> None:
+    rows = {r.external_id: r for r in await SqlDashboardQueries(engine).listings(ListingQuery())}
+
+    assert rows["a"].trend == (20000, 18000)
+    assert rows["d"].trend == (10000, 11000)
+    assert rows["b"].trend == (30000,)  # the sold-out collection has no price to draw
+    assert rows["c"].trend == (5000,)
+
+
+async def test_history_returns_the_collections_oldest_first(
+    seeded: str, engine: AsyncEngine
+) -> None:
+    queries = SqlDashboardQueries(engine)
+    ids = await _listing_ids(queries)
+
+    history = await queries.history(ids["a"], NOW - 7 * 24 * H)
+
+    assert history is not None
+    assert (history.source_id, history.title) == ("dash", "RTX 4070 Ti Ventus")
+    assert [p.pix for p in history.points] == [Price(20000), Price(18000)]
+    assert [p.collected_at for p in history.points] == [NOW - 2 * H, NOW - H]
+
+
+async def test_history_includes_sold_out_collections(seeded: str, engine: AsyncEngine) -> None:
+    queries = SqlDashboardQueries(engine)
+    ids = await _listing_ids(queries)
+
+    history = await queries.history(ids["b"], NOW - 7 * 24 * H)
+
+    assert history is not None
+    assert [(p.pix, p.in_stock) for p in history.points] == [(Price(30000), True), (None, False)]
+
+
+async def test_history_respects_since_and_keeps_the_newest_when_limited(
+    seeded: str, engine: AsyncEngine
+) -> None:
+    queries = SqlDashboardQueries(engine)
+    ids = await _listing_ids(queries)
+
+    recent = await queries.history(ids["a"], NOW - 90 * MIN)
+    limited = await queries.history(ids["a"], NOW - 7 * 24 * H, limit=1)
+
+    assert recent is not None and [p.pix for p in recent.points] == [Price(18000)]
+    assert limited is not None and [p.pix for p in limited.points] == [Price(18000)]
+
+
+async def test_history_of_an_unknown_listing_is_none(seeded: str, engine: AsyncEngine) -> None:
+    from caramelo.domain.ids import ListingId, new_id
+
+    assert await SqlDashboardQueries(engine).history(ListingId(new_id()), NOW - H) is None
+
+
+async def test_activity_has_one_bucket_per_hour_including_empty_ones(
+    seeded: str, engine: AsyncEngine
+) -> None:
+    buckets = await SqlDashboardQueries(engine).activity(NOW, hours=6)
+
+    assert [b.hour.astimezone(UTC).hour for b in buckets] == [7, 8, 9, 10, 11, 12]
+    assert [b.points for b in buckets] == [0, 0, 1, 2, 4, 0]

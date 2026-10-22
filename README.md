@@ -69,7 +69,8 @@ Para acompanhar a coleta, abra o painel no terminal (somente leitura, não conta
 uv run caramelo dashboard          # precisa do banco acessível em localhost:5432
 ```
 
-Teclas: `1`/`2` trocam de aba, `/` busca, `e` filtra estoque, `m` só mudanças de preço, `o` muda a
+Teclas: `1`/`2`/`3` trocam de aba (visão geral, anúncios, histórico), `Enter` num anúncio abre o
+gráfico do histórico de preço, `/` busca, `e` filtra estoque, `m` só mudanças de preço, `o` muda a
 ordem, `r` atualiza e `q` sai.
 
 O worker roda um job a cada minuto que cria as coletas dos anúncios vencidos, em lotes por loja.

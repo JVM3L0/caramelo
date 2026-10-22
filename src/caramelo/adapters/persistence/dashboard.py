@@ -4,7 +4,15 @@ from typing import Any
 from sqlalchemy import Boolean, Integer, String, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from caramelo.application.dashboard import ListingOrder, ListingQuery, ListingRow, SourceHealth
+from caramelo.application.dashboard import (
+    ActivityBucket,
+    HistoryPoint,
+    ListingHistory,
+    ListingOrder,
+    ListingQuery,
+    ListingRow,
+    SourceHealth,
+)
 from caramelo.domain.ids import ListingId, SourceId
 from caramelo.domain.money import Price
 
@@ -21,7 +29,8 @@ WITH rows AS (
     SELECT l.id, l.source_id, l.external_id, l.title, l.url, l.next_collect_at,
            p.pix_cents, p.card_cents, p.in_stock, p.collected_at, c.points,
            COALESCE(p.pix_cents, p.card_cents) AS cur,
-           COALESCE(prev.pix_cents, prev.card_cents) AS prv
+           COALESCE(prev.pix_cents, prev.card_cents) AS prv,
+           tr.trend
     FROM listings l
     JOIN LATERAL (
         SELECT pix_cents, card_cents, in_stock, collected_at FROM price_points
@@ -35,6 +44,12 @@ WITH rows AS (
         WHERE listing_id = l.id AND collected_at < p.collected_at
         ORDER BY collected_at DESC LIMIT 1
     ) prev ON true
+    LEFT JOIN LATERAL (
+        SELECT array_agg(v ORDER BY ts) AS trend FROM (
+            SELECT COALESCE(pix_cents, card_cents) AS v, collected_at AS ts FROM price_points
+            WHERE listing_id = l.id ORDER BY collected_at DESC LIMIT 12
+        ) recent WHERE v IS NOT NULL
+    ) tr ON true
     WHERE (CAST(:search AS text) = '' OR l.title ILIKE :pattern ESCAPE '\\')
       AND (CAST(:in_stock AS boolean) IS NULL OR p.in_stock = CAST(:in_stock AS boolean))
 ), scored AS (
@@ -65,6 +80,26 @@ LEFT JOIN LATERAL (
     WHERE listing_id = l.id ORDER BY collected_at DESC LIMIT 1
 ) p ON true
 GROUP BY l.source_id
+"""
+
+_HISTORY_SQL = """
+SELECT collected_at, pix_cents, card_cents, in_stock FROM (
+    SELECT collected_at, pix_cents, card_cents, in_stock FROM price_points
+    WHERE listing_id = :listing_id AND collected_at >= :since
+    ORDER BY collected_at DESC LIMIT :limit
+) newest ORDER BY collected_at
+"""
+
+_ACTIVITY_SQL = """
+SELECT h AS hour, count(pp.listing_id) AS points
+FROM generate_series(
+    date_trunc('hour', CAST(:now AS timestamptz))
+        - (CAST(:hours AS integer) - 1) * interval '1 hour',
+    date_trunc('hour', CAST(:now AS timestamptz)),
+    interval '1 hour'
+) AS h
+LEFT JOIN price_points pp ON pp.collected_at >= h AND pp.collected_at < h + interval '1 hour'
+GROUP BY h ORDER BY h
 """
 
 _POINTS_SQL = """
@@ -148,6 +183,41 @@ class SqlDashboardQueries:
                 points=row.points,
                 next_collect_at=row.next_collect_at,
                 change=row.chg,
+                trend=tuple(row.trend or ()),
             )
             for row in rows
         ]
+
+    async def history(
+        self, listing_id: ListingId, since: datetime, limit: int = 2000
+    ) -> ListingHistory | None:
+        async with self._engine.connect() as conn:
+            listing = (
+                await conn.execute(
+                    text("SELECT source_id, title, url FROM listings WHERE id = :id"),
+                    {"id": listing_id},
+                )
+            ).first()
+            if listing is None:
+                return None
+            rows = (
+                await conn.execute(
+                    text(_HISTORY_SQL),
+                    {"listing_id": listing_id, "since": since, "limit": limit},
+                )
+            ).all()
+        return ListingHistory(
+            listing_id=listing_id,
+            source_id=SourceId(listing.source_id),
+            title=listing.title,
+            url=listing.url,
+            points=tuple(
+                HistoryPoint(r.collected_at, _price(r.pix_cents), _price(r.card_cents), r.in_stock)
+                for r in rows
+            ),
+        )
+
+    async def activity(self, now: datetime, hours: int = 24) -> list[ActivityBucket]:
+        async with self._engine.connect() as conn:
+            rows = (await conn.execute(text(_ACTIVITY_SQL), {"now": now, "hours": hours})).all()
+        return [ActivityBucket(hour=row.hour, points=row.points) for row in rows]

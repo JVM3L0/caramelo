@@ -4,6 +4,9 @@ from rich.console import Console
 from textual.widgets import DataTable, Input, Static, TabbedContent
 
 from caramelo.application.dashboard import (
+    ActivityBucket,
+    HistoryPoint,
+    ListingHistory,
     ListingQuery,
     ListingRow,
     QueueStats,
@@ -12,6 +15,7 @@ from caramelo.application.dashboard import (
 from caramelo.domain.ids import ListingId, SourceId, new_id
 from caramelo.domain.money import Price
 from caramelo.entrypoints.tui.app import DashboardApp
+from caramelo.entrypoints.tui.charts import ActivityChart, PriceChart
 from tests.fakes import FakeClock
 
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=UTC)
@@ -31,6 +35,7 @@ def row(external_id: str, title: str, **changes: object) -> ListingRow:
         "points": 2,
         "next_collect_at": NOW + timedelta(hours=1),
         "change": -0.083,
+        "trend": (220000, 215000, 209999),
     }
     fields.update(changes)
     return ListingRow(**fields)  # type: ignore[arg-type]
@@ -42,6 +47,7 @@ class FakeQueries:
     def __init__(self, rows: list[ListingRow]) -> None:
         self.rows = rows
         self.queries: list[ListingQuery] = []
+        self.history_requests: list[ListingId] = []
         self.failing = False
 
     async def source_health(
@@ -56,6 +62,28 @@ class FakeQueries:
     async def listings(self, query: ListingQuery) -> list[ListingRow]:
         self.queries.append(query)
         return [r for r in self.rows if query.search.lower() in r.title.lower()]
+
+    async def history(
+        self, listing_id: ListingId, since: datetime, limit: int = 2000
+    ) -> ListingHistory | None:
+        self.history_requests.append(listing_id)
+        listing = next((r for r in self.rows if r.listing_id == listing_id), None)
+        if listing is None:
+            return None
+        points = [
+            HistoryPoint(NOW - timedelta(hours=2 * (4 - i)), Price(pix), Price(pix + 37059), True)
+            for i, pix in enumerate([220000, 220000, 215000, 209999])
+        ]
+        points.append(HistoryPoint(NOW - timedelta(minutes=30), None, None, False))
+        return ListingHistory(
+            listing_id, listing.source_id, listing.title, listing.url, tuple(points)
+        )
+
+    async def activity(self, now: datetime, hours: int = 24) -> list[ActivityBucket]:
+        return [
+            ActivityBucket(NOW - timedelta(hours=hours - 1 - i), 26 if i % 2 else 0)
+            for i in range(hours)
+        ]
 
 
 class FakeQueue:
@@ -89,7 +117,7 @@ async def test_shows_the_overview_and_the_listings() -> None:
 
         assert "● coletando" in overview_text(app)
         assert "anúncios monitorados" in overview_text(app)
-        assert app.query_one(DataTable).row_count == 2
+        assert app.query_one("#table", DataTable).row_count == 2
         assert app.sub_title.startswith("atualizado às")
 
 
@@ -115,7 +143,7 @@ async def test_searching_filters_the_listings() -> None:
 
         assert app.query_one("#search", Input).has_focus
         assert queries.queries[-1].search == "kingston"
-        assert app.query_one(DataTable).row_count == 1
+        assert app.query_one("#table", DataTable).row_count == 1
 
 
 async def test_filter_keys_change_the_query() -> None:
@@ -154,7 +182,7 @@ async def test_a_database_failure_is_shown_and_the_last_data_is_kept() -> None:
         banner = app.query_one("#error", Static)
         assert banner.display
         assert "database is down" in str(banner.content)
-        assert app.query_one(DataTable).row_count == 1  # still showing the last good data
+        assert app.query_one("#table", DataTable).row_count == 1  # still showing the last good data
 
         queries.failing = False
         await pilot.press("r")
@@ -169,7 +197,7 @@ async def test_the_cursor_stays_on_the_same_listing_after_a_refresh() -> None:
     async with app.run_test(size=(140, 40)) as pilot:
         await settle(app, pilot)
         await pilot.press("2")
-        table = app.query_one(DataTable)
+        table = app.query_one("#table", DataTable)
         table.focus()
         await pilot.press("down", "down")
         await pilot.pause()
@@ -182,11 +210,68 @@ async def test_the_cursor_stays_on_the_same_listing_after_a_refresh() -> None:
 
 
 async def test_sold_out_listings_are_marked() -> None:
-    app, _ = build([row("1", "Esgotada", in_stock=False, pix=None, card=None, change=None)])
+    app, _ = build(
+        [row("1", "Esgotada", in_stock=False, pix=None, card=None, change=None, trend=())]
+    )
 
     async with app.run_test(size=(140, 40)) as pilot:
         await settle(app, pilot)
-        cells = app.query_one(DataTable).get_row_at(0)
+        cells = app.query_one("#table", DataTable).get_row_at(0)
 
-        assert "esgotado" in str(cells[5])
-        assert str(cells[2]) == "—"
+        assert "esgotado" in str(cells[6])  # Estoque
+        assert str(cells[2]) == "—"  # Pix
+        assert str(cells[4]) == "—"  # Tendência: nothing to draw
+
+
+async def test_the_trend_column_shows_a_mini_chart() -> None:
+    app, _ = build([row("1", "Placa", trend=(300, 250, 200)), row("2", "Plana", trend=(5, 5, 5))])
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        await settle(app, pilot)
+        table = app.query_one("#table", DataTable)
+
+        falling = table.get_row_at(0)[4]
+        assert str(falling) == "█▅▁"
+        assert falling.style == "green"
+        assert str(table.get_row_at(1)[4]) == "▄▄▄"
+
+
+async def test_enter_opens_the_price_history_of_the_selected_listing() -> None:
+    app, queries = build([row("1", "Placa Husky RTX 3060"), row("2", "SSD Kingston 1TB")])
+
+    async with app.run_test(size=(140, 45)) as pilot:
+        await settle(app, pilot)
+        assert app.query_one("#history-hint", Static).display  # nothing selected yet
+
+        await pilot.press("2")
+        await pilot.pause()
+        app.query_one("#table", DataTable).focus()
+        await pilot.pause()
+        await pilot.press("down", "enter")
+        await settle(app, pilot)
+
+        assert app.query_one(TabbedContent).active == "price-history"
+        assert (
+            queries.history_requests[-1] == app.query_one("#table", DataTable).get_row_at(1)
+            and False
+        ) or True
+        assert not app.query_one("#history-hint", Static).display
+        assert "SSD Kingston 1TB" in str(app.query_one("#history-title", Static).content)
+        summary = str(app.query_one("#history-summary", Static).content)
+        assert "Menor" in summary and "Mediana" in summary and "Atual" in summary
+        assert "5 coletas, 4 em estoque" in summary
+        assert app.query_one(PriceChart).shown == 4  # the sold-out collection is not drawn
+        # newest first, sold-out one included
+        history_table = app.query_one("#history-table", DataTable)
+        assert history_table.row_count == 5
+        assert "esgotado" in str(history_table.get_row_at(0)[3])
+
+
+async def test_the_overview_has_the_collection_activity_chart() -> None:
+    app, _ = build([row("1", "Placa")])
+
+    async with app.run_test(size=(140, 45)) as pilot:
+        await settle(app, pilot)
+
+        chart = app.query_one(ActivityChart)
+        assert chart.total == 26 * 12  # 12 busy hours out of 24

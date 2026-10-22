@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from rich.console import Console
 
-from caramelo.application.dashboard import QueueStats, SourceHealth
+from caramelo.application.dashboard import PriceSummary, QueueStats, SourceHealth
 from caramelo.domain.ids import SourceId
 from caramelo.domain.money import Price
 from caramelo.entrypoints.tui import format as fmt
@@ -123,3 +123,63 @@ class TestRenderOverview:
         text = plain(fmt.render_overview([], QueueStats(0, 0, 0, None), NOW))
 
         assert "caramelo seed" in text
+
+
+class TestSpark:
+    def test_a_falling_price_is_green_and_ends_low(self) -> None:
+        line = fmt.spark((300, 250, 200))
+
+        assert line.plain == "█▅▁"
+        assert line.style == "green"
+
+    def test_a_rising_price_is_red_and_ends_high(self) -> None:
+        line = fmt.spark((200, 250, 300))
+
+        assert line.plain == "▁▅█"
+        assert line.style == "red"
+
+    def test_a_flat_price_is_a_dim_line(self) -> None:
+        line = fmt.spark((5, 5, 5))
+
+        assert line.plain == "▄▄▄"
+        assert line.style == "dim"
+
+    def test_without_prices_it_is_a_dash(self) -> None:
+        assert fmt.spark(()).plain == "—"
+
+    def test_a_single_price_is_not_an_error(self) -> None:
+        assert fmt.spark((100,)).plain == "▄"
+
+
+class TestSummary:
+    def data(self, **changes: object) -> PriceSummary:
+        fields: dict[str, object] = {
+            "collections": 8,
+            "in_stock_collections": 7,
+            "lowest": Price(180000),
+            "highest": Price(220000),
+            "median": Price(200000),
+            "current": Price(190000),
+            "vs_median": -0.05,
+        }
+        fields.update(changes)
+        return PriceSummary(**fields)  # type: ignore[arg-type]
+
+    def test_shows_the_numbers_and_where_the_price_stands(self) -> None:
+        text = fmt.summary(self.data())
+
+        assert "Menor R$ 1.800,00" in text.plain
+        assert "Mediana R$ 2.000,00" in text.plain
+        assert "Maior R$ 2.200,00" in text.plain
+        assert "Atual R$ 1.900,00" in text.plain
+        assert "5,0% abaixo da mediana" in text.plain
+        assert "8 coletas, 7 em estoque" in text.plain
+
+    def test_above_the_median_is_flagged_as_such(self) -> None:
+        assert "10,0% acima da mediana" in fmt.summary(self.data(vs_median=0.1)).plain
+
+    def test_without_a_current_price_there_is_no_comparison(self) -> None:
+        text = fmt.summary(self.data(current=None, vs_median=None))
+
+        assert "Atual —" in text.plain
+        assert "mediana" not in text.plain.replace("Mediana", "")

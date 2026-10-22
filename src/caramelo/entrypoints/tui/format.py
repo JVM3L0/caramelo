@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from caramelo.application.dashboard import QueueStats, SourceHealth
+from caramelo.application.dashboard import PriceSummary, QueueStats, SourceHealth
 from caramelo.domain.money import Price
 
 # No collection for this long means the worker is not doing its job.
@@ -29,6 +29,45 @@ def change(ratio: float | None) -> Text:
     if ratio < 0:
         return Text(f"▼ {percent(ratio)}", style="green")
     return Text(f"▲ {percent(ratio)}", style="red")
+
+
+_BLOCKS = "▁▂▃▄▅▆▇█"
+
+
+def spark(values: tuple[int, ...]) -> Text:
+    """A tiny trend line from recent prices: green if the price fell, red if it rose."""
+    if not values:
+        return Text("—", style="dim")
+    low, high = min(values), max(values)
+    if low == high:
+        return Text(_BLOCKS[3] * len(values), style="dim")
+    steps = len(_BLOCKS) - 1
+    line = "".join(_BLOCKS[round((v - low) / (high - low) * steps)] for v in values)
+    return Text(line, style="green" if values[-1] < values[0] else "red")
+
+
+def summary(data: PriceSummary) -> Text:
+    """The numbers under the price chart."""
+    text = Text()
+    for label, value in (
+        ("Menor", data.lowest),
+        ("Mediana", data.median),
+        ("Maior", data.highest),
+        ("Atual", data.current),
+    ):
+        text.append(f"{label} ", style="dim")
+        text.append(price(value), style="bold")
+        text.append("   ")
+    if data.vs_median is not None and abs(data.vs_median) >= 0.0005:
+        below = data.vs_median < 0
+        text.append(
+            f"{percent(data.vs_median)} {'abaixo' if below else 'acima'} da mediana",
+            style="green" if below else "red",
+        )
+    text.append(
+        f"\n{data.collections} coletas, {data.in_stock_collections} em estoque", style="dim"
+    )
+    return text
 
 
 def relative(now: datetime, then: datetime | None) -> str:

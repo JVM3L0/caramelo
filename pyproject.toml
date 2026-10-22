@@ -17,6 +17,7 @@ dependencies = [
     "selectolax>=1.0.1",
     "sqlalchemy[asyncio]>=2",
     "textual>=8.2.8",
+    "textual-plotext>=1.0.1",
 ]
 
 [project.scripts]
